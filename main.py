@@ -28,7 +28,7 @@ def call_model(prompt):
             "Content-Type": "application/json",
         },
         json={
-            "model": "anthropic/claude-3-sonnet-20240229",
+            "model": "anthropic/claude-3-sonnet",
             "messages": [
                 {
                     "role": "system",
