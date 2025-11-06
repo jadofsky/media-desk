@@ -1,28 +1,43 @@
-# personalities.py
+# Journalistic / broadcast-style personas for X/Twitter-style posts.
+# Each returns a short block formatted like a social post (name + one take).
 
-def samuel_a_loud(summary):
-    return f"**SAMUEL A. LOUD REPORTING:**\n{summary.upper()}\nThis is a SEASON-DEFINING moment."
+def _x_post(display: str, handle: str, text: str) -> str:
+    # Keep it tight; Discord-safe
+    text = text.strip().replace("\n", " ")
+    if len(text) > 300:
+        text = text[:297].rstrip() + "…"
+    header = f"**{display}** — {handle}"
+    return f"{header}\n{text}"
 
-def benny_onyx(summary):
-    return f"*Benny Onyx (Insider Notes):*\n{summary}\n(Developing...)"
+def SAMUEL_A_LOUD(take: str) -> str:
+    # Arena voice, hype, big energy
+    return _x_post("Samuel A. Loud", "@ArenaVoice",
+                   take)
 
-def adam_shepwell(summary):
-    return f"**BREAKING NEWS:** {summary}"
+def CASSIE_CROSSFADE(take: str) -> str:
+    # Tactical breakdown, sharp, TV analyst vibe
+    return _x_post("Cassie Crossfade — Tactical Breakdown", "@CassieChalk",
+                   take)
 
-def cassie_crossfade(summary):
-    return f"**Cassie Crossfade — Tactical Breakdown**\n{summary}"
+def MILO_STATTENBERG(take: str) -> str:
+    # Analytics forward, nerdy bite
+    return _x_post("Milo Stattenberg — Analytics Desk", "@MiloModels",
+                   take)
 
-def coach_old_head(summary):
-    return f"**Coach Henry says:**\n{summary}\nBack in MY day, fundamentals mattered."
+def UNCLE_DALE(take: str) -> str:
+    # Blue-collar fan energy, spicy but not toxic
+    return _x_post("Uncle Dale", "@DaleAtTheBar",
+                   take)
 
-def milo_stattenberg(summary):
-    return f"**Milo Stattenberg — Analytics Desk**\n{summary}\nInterpret the data how you like."
+def THE_INSIDER(take: str) -> str:
+    # Insider whisper vibe (short, coy)
+    return _x_post("The Insider", "@SSGWhispers",
+                   take)
 
-PERSONALITIES = [
-    samuel_a_loud,
-    benny_onyx,
-    adam_shepwell,
-    cassie_crossfade,
-    coach_old_head,
-    milo_stattenberg
+JOURNALISTIC_PERSONALITIES = [
+    SAMUEL_A_LOUD,
+    CASSIE_CROSSFADE,
+    MILO_STATTENBERG,
+    UNCLE_DALE,
+    THE_INSIDER,
 ]
