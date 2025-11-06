@@ -30,7 +30,7 @@ def call_model(prompt):
             "Content-Type": "application/json",
         },
         json={
-            "model": "minimax/minimax-llama-3-8b",  # ✅ Free & compatible
+            "model": "minimax/minimax-m2",  # ✅ Free & compatible
             "messages": [
                 {
                     "role": "system",
