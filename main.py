@@ -2,7 +2,6 @@ import discord
 import asyncio
 import random
 import requests
-import os
 
 from config import (
     DISCORD_TOKEN,
@@ -25,19 +24,19 @@ def call_model(prompt):
         f"{API_BASE_URL}/chat/completions",
         headers={
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://simsportsgaming.com",  # Optional but recommended
+            "HTTP-Referer": "https://simsportsgaming.com",  # Recommended for OpenRouter
             "X-Title": "SSG Media Desk Bot",
             "Content-Type": "application/json",
         },
         json={
-            "model": "anthropic/claude-3-sonnet",
+            "model": "anthropic/claude-3-sonnet:beta",  # ✅ Correct model slug
             "messages": [
                 {
                     "role": "system",
                     "content": (
                         "You are a dramatic, story-driven sports journalist. "
                         "Transform raw Discord league chatter into engaging narrative stories. "
-                        "Focus on rivalries, rising stars, upsets, and emotional stakes."
+                        "Focus on rivalries, rising stars, upsets, rumors, and emotional stakes."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -47,7 +46,7 @@ def call_model(prompt):
 
     data = response.json()
 
-    # ✅ If OpenRouter returned an error, show it in logs
+    # ✅ Handle API errors gracefully
     if "choices" not in data:
         print("🔥 OpenRouter API Error:", data)
         return "⚠️ Media Desk could not generate a summary this cycle."
@@ -102,20 +101,23 @@ async def media_loop():
 async def on_ready():
     print(f"✅ Media Desk Bot is ONLINE — Logged in as {client.user}")
 
-    # Run one report immediately
+    # ✅ Send first report immediately
     await asyncio.sleep(5)
     print("📣 Running immediate media report...")
+
     messages = await gather_messages()
     if messages:
-        summary_prompt = "\n".join(messages)
-        summary = call_model(summary_prompt)
+        combined = "\n".join(messages)
+        summary = call_model(combined)
         personality = random.choice(PERSONALITIES)
         formatted_output = personality(summary)
-        output_channel = client.get_channel(MEDIA_DESK_CHANNEL)
-        if output_channel:
-            await output_channel.send(formatted_output)
+
+        channel = client.get_channel(MEDIA_DESK_CHANNEL)
+        if channel:
+            await channel.send(formatted_output)
             print("✅ Sent immediate report.")
 
+    # ✅ Start repeating loop
     client.loop.create_task(media_loop())
 
 
