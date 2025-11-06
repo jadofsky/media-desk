@@ -12,78 +12,85 @@ from config import (
     SUMMARY_INTERVAL,
 )
 
-
-# --------------------------------------------------------
-# Personality Styles (LIGHT) — Headlines + Social Voice
-# --------------------------------------------------------
-def headline_style(text):
-    lines = text.split("\n")
-    formatted = []
-    for line in lines:
-        line = line.strip()
-        if len(line) > 0:
-            formatted.append(f"**{line}**")
-    return "\n".join(formatted)
+from personalities import PERSONALITIES
 
 
-def social_commentary_style(text):
-    return f"💬 *Media Commentary:* {text}"
-
-
-PERSONALITIES = [
-    headline_style,
-    social_commentary_style,
-]
-
-
-# --------------------------------------------------------
-# Discord Client Setup
-# --------------------------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
 
-# --------------------------------------------------------
-# Model Call (MiniMax Free) — No Reasoning Leakage
-# --------------------------------------------------------
+def format_headlines(text):
+    """
+    Ensures headlines are bold and body text normal.
+    Rules:
+    - Any line starting with a number or "BREAKING" becomes bold.
+    - Rest stays normal.
+    """
+    lines = text.split("\n")
+    formatted = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped == "":
+            formatted.append("")
+            continue
+
+        # Headline rules
+        if stripped.upper().startswith("BREAKING") or stripped[0].isdigit():
+            formatted.append(f"**{stripped}**")
+        else:
+            formatted.append(stripped)
+
+    return "\n".join(formatted)
+
+
+def truncate(text, limit=3500):
+    """Avoid Discord max message length (4000)."""
+    return text[:limit]
+
+
 def call_model(prompt):
-    response = requests.post(
-        f"{API_BASE_URL}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://simsportsgaming.com",
-            "X-Title": "SSG Media Desk Bot",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": "minimax/minimax-m2:free",
-            "include_reasoning": False,   # ✅ Prevents internal chain-of-thought leaking
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a journalistic sports news writer. "
-                        "Write short, clean, structured updates. "
-                        "Do NOT explain reasoning. Do NOT mention being an AI."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-        },
-    )
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "HTTP-Referer": "https://simsportsgaming.com",
+                "X-Title": "SSG Media Desk Bot",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "minimax/minimax-m2:free",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a dramatic, concise sports media analyst. "
+                            "Write like a newsroom feed — headlines bold, body natural, not spammy."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            },
+            timeout=25
+        )
+        data = response.json()
 
-    data = response.json()
-    if "choices" not in data:
+        if "choices" not in data:
+            return None
+
+        text = data["choices"][0]["message"]["content"].strip()
+        return text
+
+    except Exception:
         return None
-    return data["choices"][0]["message"]["content"].strip()
 
 
-# --------------------------------------------------------
-# Message Collection
-# --------------------------------------------------------
-async def gather_messages(limit=40):
+async def gather_messages(limit_per_channel=30):
     messages = []
+
     for league, channels in CHANNEL_GROUPS.items():
         for label, ch_id in channels.items():
             if not ch_id:
@@ -93,11 +100,8 @@ async def gather_messages(limit=40):
             if not channel:
                 continue
 
-            if hasattr(channel, "threads") and isinstance(channel, discord.ForumChannel):
-                continue  # Skip forum channels
-
             try:
-                async for msg in channel.history(limit=limit):
+                async for msg in channel.history(limit=limit_per_channel):
                     if msg.content:
                         messages.append(f"[{league}] {msg.content}")
             except:
@@ -106,44 +110,34 @@ async def gather_messages(limit=40):
     return messages
 
 
-# --------------------------------------------------------
-# Core Summary Routine
-# --------------------------------------------------------
-async def generate_and_send_summary():
-    output_channel = client.get_channel(MEDIA_DESK_CHANNEL)
-    if not output_channel:
-        return
+async def media_loop():
+    await client.wait_until_ready()
 
-    await output_channel.send("📰 Gathering activity… one moment…")
+    while True:
+        messages = await gather_messages()
 
-    messages = await gather_messages()
-    if not messages:
-        await output_channel.send("⚠️ No recent activity found.")
-        return
+        if messages:
+            combined = "\n".join(messages[:250])
 
-    prompt = "\n".join(messages[:300])
-    result = call_model(prompt)
+            summary = call_model(combined)
+            if summary:
+                summary = truncate(summary)
+                summary = format_headlines(summary)
 
-    if not result:
-        await output_channel.send("⚠️ Media Desk could not generate a summary this cycle.")
-        return
+                personality = random.choice(PERSONALITIES)
+                output = personality(summary)
 
-    personality = random.choice(PERSONALITIES)
-    formatted = personality(result)
+                channel = client.get_channel(MEDIA_DESK_CHANNEL)
+                if channel:
+                    await channel.send(output)
 
-    if len(formatted) > 3900:
-        formatted = formatted[:3900] + "\n…"
-
-    await output_channel.send(formatted)
+        await asyncio.sleep(SUMMARY_INTERVAL)
 
 
-# --------------------------------------------------------
-# Discord Events
-# --------------------------------------------------------
 @client.event
 async def on_ready():
-    print(f"✅ Media Desk Bot is ONLINE — Logged in as {client.user}")
-    client.loop.create_task(background_loop())
+    print(f"✅ Media Desk Online — Logged in as {client.user}")
+    client.loop.create_task(media_loop())
 
 
 @client.event
@@ -151,21 +145,22 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    if message.content.lower() == "!recap":
-        await generate_and_send_summary()
+    # Manual recap trigger (silent)
+    if message.content.lower().strip() == "!recap":
+        messages = await gather_messages()
+        if messages:
+            combined = "\n".join(messages[:250])
+            summary = call_model(combined)
+            if summary:
+                summary = truncate(summary)
+                summary = format_headlines(summary)
+
+                personality = random.choice(PERSONALITIES)
+                output = personality(summary)
+
+                channel = client.get_channel(MEDIA_DESK_CHANNEL)
+                if channel:
+                    await channel.send(output)
 
 
-# --------------------------------------------------------
-# Background Loop
-# --------------------------------------------------------
-async def background_loop():
-    await client.wait_until_ready()
-    while not client.is_closed():
-        await generate_and_send_summary()
-        await asyncio.sleep(SUMMARY_INTERVAL)
-
-
-# --------------------------------------------------------
-# Start Bot
-# --------------------------------------------------------
 client.run(DISCORD_TOKEN)
