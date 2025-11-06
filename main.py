@@ -4,7 +4,6 @@ import random
 import requests
 import os
 
-
 from config import (
     DISCORD_TOKEN,
     OPENROUTER_API_KEY,
@@ -26,18 +25,19 @@ def call_model(prompt):
         f"{API_BASE_URL}/chat/completions",
         headers={
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "HTTP-Referer": "https://simsportsgaming.com",  # Optional but recommended
+            "X-Title": "SSG Media Desk Bot",
             "Content-Type": "application/json",
         },
         json={
-            "model": "anthropic/claude-3-sonnet",  # ✅ Correct OpenRouter model slug
+            "model": "anthropic/claude-3-sonnet",
             "messages": [
                 {
                     "role": "system",
                     "content": (
                         "You are a dramatic, story-driven sports journalist. "
-                        "Your job is to transform raw league messages into exciting media narratives. "
-                        "Focus on rivalries, momentum swings, breakout performances, upsets, "
-                        "and internal tensions. Avoid listing; tell a story."
+                        "Transform raw Discord league chatter into engaging narrative stories. "
+                        "Focus on rivalries, rising stars, upsets, and emotional stakes."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -47,10 +47,10 @@ def call_model(prompt):
 
     data = response.json()
 
-    # ✅ Prevent crashes if OpenRouter returns an error
+    # ✅ If OpenRouter returned an error, show it in logs
     if "choices" not in data:
-        print("🔥 OpenRouter Error:", data)
-        return "⚠️ Media Desk could not generate a summary this cycle. (API Error)"
+        print("🔥 OpenRouter API Error:", data)
+        return "⚠️ Media Desk could not generate a summary this cycle."
 
     return data["choices"][0]["message"]["content"].strip()
 
@@ -70,7 +70,6 @@ async def gather_messages():
                         if msg.content:
                             messages.append(f"[{league}] {msg.content}")
                 except Exception as e:
-                    # ✅ This tells us EXACTLY which channel still has missing permissions
                     print(f"❌ Missing Access → {league} / {label} / {ch_id} → {e}")
 
     return messages
@@ -86,7 +85,6 @@ async def media_loop():
             combined = "\n".join(messages)
             summary = call_model(combined)
 
-            # ✅ Rotate personalities
             personality = random.choice(PERSONALITIES)
             formatted_output = personality(summary)
 
@@ -118,7 +116,6 @@ async def on_ready():
             await output_channel.send(formatted_output)
             print("✅ Sent immediate report.")
 
-    # Then start the loop for future reports
     client.loop.create_task(media_loop())
 
 
