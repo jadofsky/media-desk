@@ -1,5 +1,3 @@
-# main.py
-
 import discord
 import asyncio
 import random
@@ -15,18 +13,13 @@ from config import (
 )
 from personalities import PERSONALITIES
 
-
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
 
-# ---------------------------------------------------------
-# MODEL CALL
-# ---------------------------------------------------------
 def call_model(prompt):
-    print("🛰 Sending summary request to OpenRouter...", flush=True)
-
+    print("🛰 Sending prompt to OpenRouter...")
     response = requests.post(
         f"{API_BASE_URL}/chat/completions",
         headers={
@@ -36,123 +29,85 @@ def call_model(prompt):
             "Content-Type": "application/json",
         },
         json={
-            "model": "minimax/minimax-m2",  # ✅ free model
+            "model": "minimax/minimax-m2",  # ✅ Free & working model
             "messages": [
                 {
                     "role": "system",
                     "content": (
-                        "You are a dramatic, story-driven sports journalist. "
-                        "Turn raw league chat into compelling narratives. Focus on rivalries, emotion, hype, and story arcs."
+                        "You are a dramatic, emotional sports journalist. "
+                        "Turn league chatter into compelling stories, rumors, rivalries, and locker room drama. "
+                        "Use colorful language and narrative tone."
                     ),
                 },
                 {"role": "user", "content": prompt},
             ],
         },
-        timeout=25,
     )
 
     data = response.json()
-    print("📡 MODEL RESPONSE:", data, flush=True)
+    print("📡 Response Debug:", data)
 
-    # If API error, return fallback
     if "choices" not in data:
-        print("❌ Model returned no choices (API issue)", flush=True)
         return "⚠️ Media Desk could not generate a summary this cycle."
 
     return data["choices"][0]["message"]["content"].strip()
 
 
-# ---------------------------------------------------------
-# MESSAGE GATHERING & DEBUG
-# ---------------------------------------------------------
-async def gather_messages():
+async def gather_past_week_messages():
     messages = []
-    print("🔍 Gathering messages now...", flush=True)
+    print("🔍 Collecting messages…")
 
     for league, channels in CHANNEL_GROUPS.items():
-        print(f"📂 Checking League Group: {league}", flush=True)
-
         for label, ch_id in channels.items():
-            print(f"   → Channel '{label}' with ID: {ch_id}", flush=True)
-
             if not ch_id:
-                print("     ⚠️ No ID provided, skipping", flush=True)
                 continue
-
+            
             channel = client.get_channel(ch_id)
             if not channel:
-                print("     ❌ Could not resolve channel. (Bad ID or bot not in server)", flush=True)
+                print(f"⚠️ Bot cannot see channel: {league}/{label} ({ch_id})")
                 continue
 
-            print(f"     ✅ Accessing channel: {channel.name}", flush=True)
-
             try:
-                async for msg in channel.history(limit=20):
-                    if msg.author.bot:
-                        continue
+                async for msg in channel.history(limit=200):  # ✅ Pull more = past week+
                     if msg.content:
-                        messages.append(f"[{league}:{label}] {msg.author.display_name}: {msg.content}")
-                print("     ✅ Message pull complete.", flush=True)
+                        messages.append(f"[{league}] {msg.content}")
             except Exception as e:
-                print(f"     🚫 Permission error → {e}", flush=True)
+                print(f"❌ Missing access → {league}/{label} → {e}")
 
-    print(f"📨 TOTAL MESSAGES COLLECTED THIS CYCLE: {len(messages)}", flush=True)
+    print(f"📨 Collected {len(messages)} messages total.")
     return messages
 
 
-# ---------------------------------------------------------
-# MAIN LOOP
-# ---------------------------------------------------------
-async def media_loop():
-    await client.wait_until_ready()
-    while True:
-        messages = await gather_messages()
-
-        if messages:
-            combined_text = "\n".join(messages)
-            summary = call_model(combined_text)
-            personality = random.choice(PERSONALITIES)
-            final_output = personality(summary)
-
-            channel = client.get_channel(MEDIA_DESK_CHANNEL)
-            if channel:
-                try:
-                    await channel.send(final_output)
-                    print("✅ Sent Media Desk update.", flush=True)
-                except Exception as e:
-                    print(f"⚠️ Failed to send message → {e}", flush=True)
-        else:
-            print("🟡 No messages found. Skipping model call.", flush=True)
-
-        await asyncio.sleep(SUMMARY_INTERVAL)
-
-
-# ---------------------------------------------------------
-# STARTUP EVENTS
-# ---------------------------------------------------------
 @client.event
-async def on_ready():
-    print(f"✅ Media Desk Bot ONLINE — Logged in as {client.user}", flush=True)
+async def on_message(message):
+    if message.author == client.user:
+        return
 
-    # Run instant test summary
-    await asyncio.sleep(5)
-    print("🚀 Running Initial Startup Summary...", flush=True)
-    test_messages = await gather_messages()
+    # ✅ Manual trigger
+    if message.content.lower() == "!recap":
+        print("🎬 Manual recap triggered.")
+        await message.channel.send("📰 Gathering week’s league activity… one moment…")
 
-    if test_messages:
-        combined_text = "\n".join(test_messages)
-        summary = call_model(combined_text)
+        messages = await gather_past_week_messages()
+
+        if not messages:
+            await message.channel.send("⚠️ I can't see any messages yet. Permissions might still be missing.")
+            return
+
+        text = "\n".join(messages)
+        summary = call_model(text)
+
         personality = random.choice(PERSONALITIES)
         final_output = personality(summary)
 
-        channel = client.get_channel(MEDIA_DESK_CHANNEL)
-        if channel:
-            await channel.send(final_output)
-            print("✅ Initial summary posted.", flush=True)
-    else:
-        print("🟡 No messages found for initial run.", flush=True)
+        target = client.get_channel(MEDIA_DESK_CHANNEL)
+        await target.send(final_output)
+        await message.channel.send("✅ Media Desk Recap Posted!")
 
-    client.loop.create_task(media_loop())
+
+@client.event
+async def on_ready():
+    print(f"✅ Media Desk Bot ONLINE as {client.user}")
 
 
 client.run(DISCORD_TOKEN)
