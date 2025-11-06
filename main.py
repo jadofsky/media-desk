@@ -2,6 +2,8 @@ import discord
 import asyncio
 import random
 import requests
+import os
+
 
 from config import (
     DISCORD_TOKEN,
@@ -100,7 +102,23 @@ async def media_loop():
 
 @client.event
 async def on_ready():
-    print(f"✅ Media Desk Bot ONLINE — Logged in as {client.user}")
+    print(f"✅ Media Desk Bot is ONLINE — Logged in as {client.user}")
+
+    # Run one report immediately
+    await asyncio.sleep(5)
+    print("📣 Running immediate media report...")
+    messages = await gather_messages()
+    if messages:
+        summary_prompt = "\n".join(messages)
+        summary = call_model(summary_prompt)
+        personality = random.choice(PERSONALITIES)
+        formatted_output = personality(summary)
+        output_channel = client.get_channel(MEDIA_DESK_CHANNEL)
+        if output_channel:
+            await output_channel.send(formatted_output)
+            print("✅ Sent immediate report.")
+
+    # Then start the loop for future reports
     client.loop.create_task(media_loop())
 
 
