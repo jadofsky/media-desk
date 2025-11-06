@@ -24,19 +24,18 @@ def call_model(prompt):
         f"{API_BASE_URL}/chat/completions",
         headers={
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://simsportsgaming.com",  # Recommended for OpenRouter
+            "HTTP-Referer": "https://simsportsgaming.com",
             "X-Title": "SSG Media Desk Bot",
             "Content-Type": "application/json",
         },
         json={
-            "model": "anthropic/claude-3-sonnet:beta",  # ✅ Correct model slug
+            "model": "anthropic/claude-3-sonnet:beta",  # ✅ Recommended stable model
             "messages": [
                 {
                     "role": "system",
                     "content": (
                         "You are a dramatic, story-driven sports journalist. "
-                        "Transform raw Discord league chatter into engaging narrative stories. "
-                        "Focus on rivalries, rising stars, upsets, rumors, and emotional stakes."
+                        "Transform raw Discord league chatter into narrative stories."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -45,12 +44,11 @@ def call_model(prompt):
     )
 
     data = response.json()
+    print("🛰 API RAW RESPONSE:", data)  # ✅ Add this so we can see the actual failure
 
-    # ✅ Handle API errors gracefully
     if "choices" not in data:
-        print("🔥 OpenRouter API Error:", data)
         return "⚠️ Media Desk could not generate a summary this cycle."
-
+    
     return data["choices"][0]["message"]["content"].strip()
 
 
