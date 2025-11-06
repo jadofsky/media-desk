@@ -1,7 +1,9 @@
 # config.py
 
-DISCORD_TOKEN = ""
-OPENROUTER_API_KEY = ""
+import os
+
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 API_BASE_URL = "https://openrouter.ai/api/v1"
 
 MEDIA_DESK_CHANNEL = 1435734044439613550
