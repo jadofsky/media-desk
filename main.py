@@ -53,7 +53,7 @@ def call_model(prompt):
 
 
 async def gather_messages():
-    messages = []
+    messages = []  # ✅ initialize first
 
     for league, channels in CHANNEL_GROUPS.items():
         for label, ch_id in channels.items():
@@ -69,6 +69,7 @@ async def gather_messages():
                 except Exception as e:
                     print(f"❌ Missing Access → {league} / {label} / {ch_id} → {e}")
 
+    print(f"📨 Collected {len(messages)} messages this cycle.")  # ✅ Print AFTER collection
     return messages
 
 
