@@ -1,25 +1,41 @@
-# personalities.py
+def headline_writer(summary):
+    """
+    Formats like ESPN / The Athletic Headlines
+    """
+    lines = summary.split(". ")
+    headline = lines[0].upper()
+    return f"**📰 {headline}**\n\n" + summary
 
-def personality_headline(summary: str):
-    # Clean headline formatting
-    return f"**🗞️ SSG HEADLINES**\n\n{summary}"
 
-def personality_color(summary: str):
-    # Team-beat style voice
-    return f"**🎨 Around the League:**\n{summary}"
+def personality_stephen_a(text):
+    return f"**Stephen A. Smith (Fired Up):**\nListen... LISTEN! {text} I been TRYING to tell y'all. 🤦🏽‍♂️🔥"
 
-def personality_clipped(summary: str):
-    # Short “X / Twitter” tone: quick takes
-    return f"💬 {summary}"
 
-def personality_press_room(summary: str):
-    # Neutral newsroom wire writing
-    return f"**📡 League Wire Report:**\n{summary}"
+def personality_shannon(text):
+    return f"**Shannon Sharpe (Unc Energy):**\nAye lemme tell ya somethin' playa — {text} 🥃🐎"
 
-# ✅ This is the list main.py imports
+
+def personality_doris(text):
+    return f"**Doris Burke (Professional Analyst):**\n{text}\n\n— Presented with poise and precision. 🎙️"
+
+
+def personality_pat_mcafee(text):
+    return f"**Pat McAfee Show:**\nHEY BROTHER LISTEN {text.upper()} 💥💥"
+
+
+def personality_schefty(text):
+    return f"**Adam Schefter (BREAKING):**\n🚨 {text}"
+
+
+def personality_meme(text):
+    return f"**League Social Feed:**\n{text} 🤣🤣"
+
+
 PERSONALITIES = [
-    personality_headline,
-    personality_color,
-    personality_clipped,
-    personality_press_room
+    personality_stephen_a,
+    personality_shannon,
+    personality_doris,
+    personality_pat_mcafee,
+    personality_schefty,
+    personality_meme,
 ]

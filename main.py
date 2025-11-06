@@ -2,6 +2,8 @@ import discord
 import asyncio
 import random
 import requests
+from datetime import datetime
+import pytz
 
 from config import (
     DISCORD_TOKEN,
@@ -9,158 +11,132 @@ from config import (
     API_BASE_URL,
     MEDIA_DESK_CHANNEL,
     CHANNEL_GROUPS,
-    SUMMARY_INTERVAL,
 )
-
-from personalities import PERSONALITIES
+from personalities import PERSONALITIES, headline_writer
 
 
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-
-def format_headlines(text):
-    """
-    Ensures headlines are bold and body text normal.
-    Rules:
-    - Any line starting with a number or "BREAKING" becomes bold.
-    - Rest stays normal.
-    """
-    lines = text.split("\n")
-    formatted = []
-
-    for line in lines:
-        stripped = line.strip()
-
-        if stripped == "":
-            formatted.append("")
-            continue
-
-        # Headline rules
-        if stripped.upper().startswith("BREAKING") or stripped[0].isdigit():
-            formatted.append(f"**{stripped}**")
-        else:
-            formatted.append(stripped)
-
-    return "\n".join(formatted)
-
-
-def truncate(text, limit=3500):
-    """Avoid Discord max message length (4000)."""
-    return text[:limit]
+# Track daily headline posts so we don't double-fire
+did_morning_headline = False
+did_evening_headline = False
 
 
 def call_model(prompt):
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "HTTP-Referer": "https://simsportsgaming.com",
-                "X-Title": "SSG Media Desk Bot",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "minimax/minimax-m2:free",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a dramatic, concise sports media analyst. "
-                            "Write like a newsroom feed — headlines bold, body natural, not spammy."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-            },
-            timeout=25
-        )
-        data = response.json()
+    response = requests.post(
+        f"{API_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "HTTP-Referer": "https://simsportsgaming.com",
+            "X-Title": "SSG Media Desk Bot",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": "minimax/minimax-m2:free",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You write clean, concise sports summaries. One paragraph maximum."
+                },
+                {"role": "user", "content": prompt},
+            ],
+        },
+    )
 
-        if "choices" not in data:
-            return None
-
-        text = data["choices"][0]["message"]["content"].strip()
-        return text
-
-    except Exception:
+    data = response.json()
+    if "choices" not in data:
+        print("API Error:", data)
         return None
 
+    return data["choices"][0]["message"]["content"].strip()
 
-async def gather_messages(limit_per_channel=30):
+
+async def gather_messages():
     messages = []
-
     for league, channels in CHANNEL_GROUPS.items():
-        for label, ch_id in channels.items():
-            if not ch_id:
+        for label, channel_id in channels.items():
+            if not channel_id:
                 continue
-
-            channel = client.get_channel(ch_id)
+            channel = client.get_channel(channel_id)
             if not channel:
                 continue
-
             try:
-                async for msg in channel.history(limit=limit_per_channel):
+                async for msg in channel.history(limit=25):
                     if msg.content:
-                        messages.append(f"[{league}] {msg.content}")
+                        messages.append(msg.content)
             except:
                 pass
-
     return messages
 
 
-async def media_loop():
-    await client.wait_until_ready()
+async def send_headline_post():
+    messages = await gather_messages()
+    if not messages:
+        return
+
+    combined = "\n".join(messages[:250])
+    summary = call_model(combined)
+    if not summary:
+        return
+
+    post = headline_writer(summary)
+    channel = client.get_channel(MEDIA_DESK_CHANNEL)
+    if channel:
+        await channel.send(post)
+
+
+async def send_personality_post():
+    personality = random.choice(PERSONALITIES)
+    messages = await gather_messages()
+
+    # Light or no input ok
+    text = "\n".join(messages[:200]) if messages else "General league atmosphere."
+    response = call_model(text)
+    if not response:
+        return
+
+    post = personality(response)
+    channel = client.get_channel(MEDIA_DESK_CHANNEL)
+    if channel:
+        await channel.send(post)
+
+
+async def scheduler():
+    global did_morning_headline, did_evening_headline
 
     while True:
-        messages = await gather_messages()
+        now = datetime.now(pytz.timezone("US/Eastern"))
+        hour = now.hour
+        minute = now.minute
 
-        if messages:
-            combined = "\n".join(messages[:250])
+        # ✅ Reset daily headline flags at midnight
+        if hour == 0 and minute == 0:
+            did_morning_headline = False
+            did_evening_headline = False
 
-            summary = call_model(combined)
-            if summary:
-                summary = truncate(summary)
-                summary = format_headlines(summary)
+        # ✅ 10 AM ET Headline
+        if hour == 10 and not did_morning_headline:
+            await send_headline_post()
+            did_morning_headline = True
 
-                personality = random.choice(PERSONALITIES)
-                output = personality(summary)
+        # ✅ 4 PM ET Headline
+        if hour == 16 and not did_evening_headline:
+            await send_headline_post()
+            did_evening_headline = True
 
-                channel = client.get_channel(MEDIA_DESK_CHANNEL)
-                if channel:
-                    await channel.send(output)
+        # ✅ Personality chatter every ~20 min
+        if minute % 20 == 0:
+            await send_personality_post()
 
-        await asyncio.sleep(SUMMARY_INTERVAL)
+        await asyncio.sleep(60)
 
 
 @client.event
 async def on_ready():
-    print(f"✅ Media Desk Online — Logged in as {client.user}")
-    client.loop.create_task(media_loop())
-
-
-@client.event
-async def on_message(message):
-    if message.author.bot:
-        return
-
-    # Manual recap trigger (silent)
-    if message.content.lower().strip() == "!recap":
-        messages = await gather_messages()
-        if messages:
-            combined = "\n".join(messages[:250])
-            summary = call_model(combined)
-            if summary:
-                summary = truncate(summary)
-                summary = format_headlines(summary)
-
-                personality = random.choice(PERSONALITIES)
-                output = personality(summary)
-
-                channel = client.get_channel(MEDIA_DESK_CHANNEL)
-                if channel:
-                    await channel.send(output)
+    print(f"✅ Media Desk Bot ONLINE — Logged in as {client.user}")
+    client.loop.create_task(scheduler())
 
 
 client.run(DISCORD_TOKEN)
