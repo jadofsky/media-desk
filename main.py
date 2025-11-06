@@ -10,7 +10,7 @@ from config import (
     API_BASE_URL,
     MEDIA_DESK_CHANNEL,
     CHANNEL_GROUPS,
-    SUMMARY_INTERVAL,
+    SUMMARY_INTERVAL
 )
 from personalities import PERSONALITIES
 
@@ -20,10 +20,17 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 
+async def send_long_message(channel, content):
+    """Ensures all outgoing messages respect Discord's 2000 char limit."""
+    chunks = textwrap.wrap(content, width=1900)
+    for chunk in chunks:
+        await channel.send(chunk)
+
+
 def call_model(prompt):
     print("🛰 Sending prompt to OpenRouter...")
 
-    # Limit prompt to avoid massive summaries
+    # Limit data fed to model
     prompt = prompt[-4000:]
 
     response = requests.post(
@@ -37,25 +44,18 @@ def call_model(prompt):
         json={
             "model": "minimax/minimax-m2:free",
             "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a dramatic sports journalist. Write exciting summaries "
-                        "highlighting tension, rivalries, upsets, and narratives."
-                    ),
-                },
+                {"role": "system", "content": "Write dramatic but concise sports recaps."},
                 {"role": "user", "content": prompt},
             ],
         },
-    )
+    ).json()
 
-    data = response.json()
-    print("📡 API Response:", data)
+    print("📡 API Response:", response)
 
-    if "choices" not in data:
+    if "choices" not in response:
         return "⚠️ Media Desk could not generate a summary this cycle."
 
-    return data["choices"][0]["message"]["content"].strip()
+    return response["choices"][0]["message"]["content"].strip()
 
 
 async def gather_messages():
@@ -66,59 +66,62 @@ async def gather_messages():
         print(f"📂 Checking League Group: {league}")
         for label, ch_id in channels.items():
             if not ch_id:
-                print(f"   → Channel '{label}' skipped (None)")
                 continue
 
-            print(f"   → Channel '{label}' with ID: {ch_id}")
             channel = client.get_channel(ch_id)
             if not channel:
-                print(f"     ⚠️ Channel not found in cache")
                 continue
 
             try:
-                async for msg in channel.history(limit=35):
+                async for msg in channel.history(limit=25):
                     if msg.content:
-                        messages.append(f"[{league}] {msg.author.display_name}: {msg.content}")
-
-            except Exception as e:
-                print(f"     🚫 Permission error → {e}")
+                        messages.append(f"{league}: {msg.author.display_name}: {msg.content}")
+            except:
+                pass
 
     print(f"📨 TOTAL MESSAGES COLLECTED: {len(messages)}")
     return messages
 
 
-async def send_long_message(channel, content):
-    chunks = textwrap.wrap(content, width=1900)
-    for chunk in chunks:
-        await channel.send(chunk)
+async def generate_and_post_summary():
+    messages = await gather_messages()
 
+    if not messages:
+        return
 
-async def media_loop():
-    await client.wait_until_ready()
+    combined = "\n".join(messages)
+    raw_summary = call_model(combined)
 
-    while True:
-        messages = await gather_messages()
-        if messages:
-            combined = "\n".join(messages)
-            summary = call_model(combined)
-            personality = random.choice(PERSONALITIES)
-            formatted = personality(summary)
+    personality = random.choice(PERSONALITIES)
+    final_text = personality(raw_summary)
 
-            channel = client.get_channel(MEDIA_DESK_CHANNEL)
-            if channel:
-                if len(formatted) > 3900:
-                    print("✂️ Splitting long message...")
-                    await send_long_message(channel, formatted)
-                else:
-                    await channel.send(formatted)
-
-        await asyncio.sleep(SUMMARY_INTERVAL)
+    channel = client.get_channel(MEDIA_DESK_CHANNEL)
+    if channel:
+        await send_long_message(channel, final_text)
 
 
 @client.event
 async def on_ready():
-    print(f"✅ Media Desk Bot is ONLINE — Logged in as {client.user}")
-    client.loop.create_task(media_loop())
+    print(f"✅ Media Desk Bot ONLINE — Logged in as {client.user}")
+    client.loop.create_task(summary_loop())
+
+
+async def summary_loop():
+    await client.wait_until_ready()
+    while True:
+        await generate_and_post_summary()
+        await asyncio.sleep(SUMMARY_INTERVAL)
+
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+
+    # Manual trigger
+    if message.content.lower().startswith("!recap"):
+        await message.channel.send("📰 Gathering league chatter...")
+        await generate_and_post_summary()
 
 
 client.run(DISCORD_TOKEN)
