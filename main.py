@@ -30,22 +30,28 @@ def call_model(prompt):
             "Content-Type": "application/json",
         },
         json={
-            "model": "anthropic/claude-3-sonnet",
+            "model": "minimax/minimax-llama-3-8b",  # ✅ Free & compatible
             "messages": [
-                {"role": "system", "content": "You write dramatic sports summaries."},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a dramatic, story-driven sports journalist. "
+                        "Transform league chatter into compelling storylines, rivalries, conclusions, rumors, and emotional stakes."
+                    ),
+                },
                 {"role": "user", "content": prompt},
             ],
         },
     )
 
     data = response.json()
-    print("📡 Full OpenRouter Response:", data)
+    print("📡 OpenRouter Response Debug:", data)
 
-    # If OpenRouter returned an error, return generic fallback text
     if "choices" not in data:
         return "⚠️ Media Desk could not generate a summary this cycle."
 
     return data["choices"][0]["message"]["content"].strip()
+
 
 
 async def gather_messages():
