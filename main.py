@@ -21,6 +21,7 @@ client = discord.Client(intents=intents)
 
 def call_model(prompt):
     print("🛰 Sending prompt to OpenRouter...")
+
     response = requests.post(
         f"{API_BASE_URL}/chat/completions",
         headers={
@@ -32,20 +33,33 @@ def call_model(prompt):
         json={
             "model": "minimax/minimax-m2",
             "messages": [
-                {"role": "system", "content": "You write dramatic sports summaries."},
+                {
+                    "role": "system",
+                    "content": "You are a dramatic, story-driven sports journalist.",
+                },
                 {"role": "user", "content": prompt},
             ],
         },
     )
 
     data = response.json()
-    print("📡 OpenRouter Response Debug:", data)
+    print("📡 Full OpenRouter Response:", data)  # <-- Shows true structure
 
-    if "choices" not in data:
-        return "⚠️ Media Desk could not generate a summary this cycle."
+    # ✅ MiniMax returns content in a different field:
+    try:
+        return data["choices"][0]["delta"]["content"].strip()
+    except:
+        pass
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except:
+        pass
+    try:
+        return data["output_text"].strip()
+    except:
+        pass
 
-    return data["choices"][0]["message"]["content"].strip()
-
+    return "⚠️ Media Desk could not generate a summary this cycle."
 
 async def gather_messages():
     messages = []
