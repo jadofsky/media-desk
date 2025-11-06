@@ -24,18 +24,20 @@ def call_model(prompt):
         f"{API_BASE_URL}/chat/completions",
         headers={
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://simsportsgaming.com",
+            "HTTP-Referer": "https://simsportsgaming.com",  # recommended for OpenRouter
             "X-Title": "SSG Media Desk Bot",
             "Content-Type": "application/json",
         },
         json={
-            "model": "anthropic/claude-3-sonnet:beta",  # ✅ Recommended stable model
+            "model": "anthropic/claude-3-sonnet",
             "messages": [
                 {
                     "role": "system",
                     "content": (
                         "You are a dramatic, story-driven sports journalist. "
-                        "Transform raw Discord league chatter into narrative stories."
+                        "Transform raw league messages into compelling sports media narratives. "
+                        "Highlight rivalries, trash talk, momentum swings, heartbreak losses, "
+                        "breakout stars, and simmering tensions. Write like ESPN meets WWE drama."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -44,20 +46,22 @@ def call_model(prompt):
     )
 
     data = response.json()
-    print("🛰 API RAW RESPONSE:", data)  # ✅ Add this so we can see the actual failure
 
+    # ✅ Detect & report API errors safely
     if "choices" not in data:
-        return "⚠️ Media Desk could not generate a summary this cycle."
-    
+        print("🔥 OpenRouter API ERROR:", data)
+        return "⚠️ Media Desk could not generate a summary this cycle. (API Error)"
+
+    # ✅ Get model output
     return data["choices"][0]["message"]["content"].strip()
 
 
 async def gather_messages():
-    messages = []  # ✅ initialize first
+    messages = []
 
     for league, channels in CHANNEL_GROUPS.items():
         for label, ch_id in channels.items():
-            if ch_id is None:
+            if not ch_id:
                 continue
 
             channel = client.get_channel(ch_id)
@@ -69,7 +73,7 @@ async def gather_messages():
                 except Exception as e:
                     print(f"❌ Missing Access → {league} / {label} / {ch_id} → {e}")
 
-    print(f"📨 Collected {len(messages)} messages this cycle.")  # ✅ Print AFTER collection
+    print(f"📨 Collected {len(messages)} messages this cycle.")
     return messages
 
 
@@ -86,12 +90,13 @@ async def media_loop():
             personality = random.choice(PERSONALITIES)
             formatted_output = personality(summary)
 
-            channel = client.get_channel(MEDIA_DESK_CHANNEL)
-            if channel:
+            output_channel = client.get_channel(MEDIA_DESK_CHANNEL)
+            if output_channel:
                 try:
-                    await channel.send(formatted_output)
+                    await output_channel.send(formatted_output)
+                    print("✅ Posted scheduled media report.")
                 except Exception as e:
-                    print(f"⚠️ Could not send message → {e}")
+                    print(f"⚠️ Could not send scheduled message → {e}")
 
         await asyncio.sleep(SUMMARY_INTERVAL)
 
@@ -100,23 +105,27 @@ async def media_loop():
 async def on_ready():
     print(f"✅ Media Desk Bot is ONLINE — Logged in as {client.user}")
 
-    # ✅ Send first report immediately
+    # Run one immediate report
     await asyncio.sleep(5)
-    print("📣 Running immediate media report...")
+    print("📣 Running immediate first media report...")
 
     messages = await gather_messages()
+
     if messages:
         combined = "\n".join(messages)
         summary = call_model(combined)
         personality = random.choice(PERSONALITIES)
         formatted_output = personality(summary)
 
-        channel = client.get_channel(MEDIA_DESK_CHANNEL)
-        if channel:
-            await channel.send(formatted_output)
-            print("✅ Sent immediate report.")
+        output_channel = client.get_channel(MEDIA_DESK_CHANNEL)
+        if output_channel:
+            try:
+                await output_channel.send(formatted_output)
+                print("✅ Sent immediate report.")
+            except Exception as e:
+                print(f"⚠️ Could not send immediate message → {e}")
 
-    # ✅ Start repeating loop
+    # Start recurring loop
     client.loop.create_task(media_loop())
 
 
