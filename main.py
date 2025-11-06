@@ -56,10 +56,12 @@ async def gather_messages():
 
             channel = client.get_channel(ch_id)
             if channel:
-                async for msg in channel.history(limit=20):
-                    if msg.content:
-                        messages.append(f"[{league}] {msg.content}")
-
+                try:
+                    async for msg in channel.history(limit=20):
+                        if msg.content:
+                            messages.append(f"[{league}] {msg.content}")
+                except Exception as e:
+                    print(f"❌ Missing Access → {league} / {label} / {ch_id} → {e}")
     return messages
 
 
