@@ -1,43 +1,25 @@
-# Journalistic / broadcast-style personas for X/Twitter-style posts.
-# Each returns a short block formatted like a social post (name + one take).
+# personalities.py
 
-def _x_post(display: str, handle: str, text: str) -> str:
-    # Keep it tight; Discord-safe
-    text = text.strip().replace("\n", " ")
-    if len(text) > 300:
-        text = text[:297].rstrip() + "…"
-    header = f"**{display}** — {handle}"
-    return f"{header}\n{text}"
+def personality_headline(summary: str):
+    # Clean headline formatting
+    return f"**🗞️ SSG HEADLINES**\n\n{summary}"
 
-def SAMUEL_A_LOUD(take: str) -> str:
-    # Arena voice, hype, big energy
-    return _x_post("Samuel A. Loud", "@ArenaVoice",
-                   take)
+def personality_color(summary: str):
+    # Team-beat style voice
+    return f"**🎨 Around the League:**\n{summary}"
 
-def CASSIE_CROSSFADE(take: str) -> str:
-    # Tactical breakdown, sharp, TV analyst vibe
-    return _x_post("Cassie Crossfade — Tactical Breakdown", "@CassieChalk",
-                   take)
+def personality_clipped(summary: str):
+    # Short “X / Twitter” tone: quick takes
+    return f"💬 {summary}"
 
-def MILO_STATTENBERG(take: str) -> str:
-    # Analytics forward, nerdy bite
-    return _x_post("Milo Stattenberg — Analytics Desk", "@MiloModels",
-                   take)
+def personality_press_room(summary: str):
+    # Neutral newsroom wire writing
+    return f"**📡 League Wire Report:**\n{summary}"
 
-def UNCLE_DALE(take: str) -> str:
-    # Blue-collar fan energy, spicy but not toxic
-    return _x_post("Uncle Dale", "@DaleAtTheBar",
-                   take)
-
-def THE_INSIDER(take: str) -> str:
-    # Insider whisper vibe (short, coy)
-    return _x_post("The Insider", "@SSGWhispers",
-                   take)
-
-JOURNALISTIC_PERSONALITIES = [
-    SAMUEL_A_LOUD,
-    CASSIE_CROSSFADE,
-    MILO_STATTENBERG,
-    UNCLE_DALE,
-    THE_INSIDER,
+# ✅ This is the list main.py imports
+PERSONALITIES = [
+    personality_headline,
+    personality_color,
+    personality_clipped,
+    personality_press_room
 ]
