@@ -105,11 +105,25 @@ async def scheduler():
         await asyncio.sleep(60)
 
 
+# -------- COMMAND LISTENERS -------- #
 @client.event
-async def on_ready():
-    debug_print(f"✅ Bot ONLINE as {client.user}")
-    debug_print(f"Listening in channel ID: {MEDIA_DESK_CHANNEL}")
-    client.loop.create_task(scheduler())
+async def on_message(message):
+    # Ignore the bot's own messages
+    if message.author == client.user:
+        return
+
+    content = message.content.lower().strip()
+
+    # Manual personality post trigger
+    if content == "!persona":
+        await post_personality_message()
+        return
+
+    # Manual headline post trigger
+    if content == "!highlight":
+        await post_headline_message()
+        return
+
 
 
 client.run(DISCORD_TOKEN)
