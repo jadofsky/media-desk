@@ -1,69 +1,55 @@
 import discord
-from discord.ext import tasks, commands
-import pytz
-import datetime
+import asyncio
 import random
 import requests
-import os
+from datetime import datetime, time
+import pytz
 
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+from config import (
+    DISCORD_TOKEN,
+    OPENROUTER_API_KEY,
+    API_BASE_URL,
+    MEDIA_DESK_CHANNEL,
+    CHANNEL_GROUPS,
+)
 
-if not DISCORD_TOKEN:
-    raise ValueError("❌ DISCORD_TOKEN not found. Set it in Render > Environment.")
-if not OPENROUTER_API_KEY:
-    raise ValueError("❌ OPENROUTER_API_KEY not found. Set it in Render > Environment.")
+from personalities import pick_personality, render_name_style
+from highlights import generate_headline_post, generate_personality_post
 
 
-from personalities import PERSONALITIES
-from highlights import generate_headline_post
-
-# ---- DISCORD INTENTS ----
+# -------- DISCORD CLIENT -------- #
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True
-intents.members = True
-
-# ---- BOT OBJECT ----
-client = commands.Bot(command_prefix="!", intents=intents)
+client = discord.Client(intents=intents)
 
 
-
-### MODEL CALL ###
-def call_model(prompt):
+# -------- MODEL CALL -------- #
+def call_model(prompt: str) -> str:
     response = requests.post(
         f"{API_BASE_URL}/chat/completions",
         headers={
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "HTTP-Referer": "https://simsportsgaming.com",
-            "X-Title": "SSG Media Desk",
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://simsportsgaming.com",
+            "X-Title": "SSG Media Desk Bot",
         },
         json={
-            "model": "minimax/minimax-m2:free",
+            "model": "minimax/minimax-m2",
             "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a concise sports media writer. "
-                        "Write clean and structured recaps and commentary. "
-                        "Never ramble or repeat. No hashtags. No emojis."
-                    ),
-                },
+                {"role": "system", "content": "Write in a clear, engaging sports tone."},
                 {"role": "user", "content": prompt},
             ],
         },
-    )
+    ).json()
 
-    data = response.json()
-
-    if "choices" not in data:
+    if "choices" not in response:
+        print("Model error:", response)
         return None
 
-    return data["choices"][0]["message"]["content"].strip()
+    return response["choices"][0]["message"]["content"].strip()
 
 
-### MESSAGE GATHERING ###
+# -------- MESSAGE GATHERING (Non-Forum Only) -------- #
 async def gather_messages():
     messages = []
 
@@ -73,120 +59,75 @@ async def gather_messages():
                 continue
 
             channel = client.get_channel(ch_id)
-            if channel:
-                try:
-                    async for msg in channel.history(limit=25):
-                        if msg.content:
-                            messages.append(f"[{league}] {msg.content}")
-                except:
-                    continue
+
+            if not channel:
+                continue
+
+            # Skip forum channels entirely
+            if hasattr(channel, "threads"):
+                continue
+
+            try:
+                async for msg in channel.history(limit=25):
+                    if msg.content:
+                        messages.append(msg.content)
+            except:
+                pass
 
     return messages
 
 
-### FORMATTING ###
-def format_headline(text):
-    lines = text.split("\n")
-    title = lines[0].strip().upper()
-    body = "\n".join(lines[1:]).strip()
-    return f"**{title}**\n{body}"
-
-
-def format_personality(name, style, text):
-    return f"**{name} — {style}**\n{text}"
-
-
-### SCHEDULERS ###
-async def send_headline():
+# -------- POST FUNCTIONS -------- #
+async def post_personality_message():
     messages = await gather_messages()
     if not messages:
         return
 
-    prompt = "\n".join(messages)
-    result = call_model(prompt)
-    if not result:
-        return
+    persona = pick_personality()
+    message_body = generate_personality_post(random.choice(messages))
 
-    formatted = format_headline(result)
-    channel = client.get_channel(MEDIA_DESK_CHANNEL)
-    await channel.send(formatted)
-
-
-async def send_personality_post():
-    messages = await gather_messages()
-    if not messages:
-        return
-
-    prompt = "\n".join(messages)
-    result = call_model(prompt)
-    if not result:
-        return
-
-    persona = random.choice(PERSONALITIES)
-    name = persona["name"]
-    style = persona["style"]
-    formatted = format_personality(name, style, result)
+    formatted = f"{render_name_style(persona)}\n{message_body}"
 
     channel = client.get_channel(MEDIA_DESK_CHANNEL)
     await channel.send(formatted)
 
 
-### MAIN LOOP ###
-async def scheduler_loop():
+async def post_headline_message():
+    messages = await gather_messages()
+    if not messages:
+        return
+
+    headline = generate_headline_post(messages)
+
+    channel = client.get_channel(MEDIA_DESK_CHANNEL)
+    await channel.send(headline)
+
+
+# -------- SCHEDULING -------- #
+async def scheduler():
     tz = pytz.timezone("US/Eastern")
-
     while True:
         now = datetime.now(tz).time()
 
-        # HEADLINES at 10:00 AM and 4:00 PM ET
-        if now.hour in [10, 16] and now.minute == 0:
-            await send_headline()
+        # Headline windows (10am & 4pm ET)
+        if now.hour == 10 and now.minute == 0:
+            await post_headline_message()
 
-        # PERSONALITY once per hour at :20 mark
-        if now.minute == 20:
-            await send_personality_post()
+        if now.hour == 16 and now.minute == 0:
+            await post_headline_message()
 
-        await asyncio.sleep(60)
+        # One personality post every hour on the hour
+        if now.minute == 0:
+            await post_personality_message()
+
+        await asyncio.sleep(60)  # check every minute
 
 
-### BOOT EVENT ###
+# -------- BOT READY -------- #
 @client.event
 async def on_ready():
-    print(f"✅ Media Desk Active as {client.user}")
-    client.loop.create_task(scheduler_loop())
-@client.event
-async def on_message(message):
-    # ignore bot messages
-    if message.author == client.user:
-        return
-
-    # let commands work from any channel
-    content = message.content.lower()
-
-    if content.startswith("!persona"):
-        messages = await gather_messages()
-        if not messages:
-            return
-        prompt = "\n".join(messages)
-        result = call_model(prompt)
-        if not result:
-            return
-        persona = random.choice(PERSONALITIES)
-        formatted = f"**{persona['name']} — {persona['style']}**\n{result}"
-        channel = client.get_channel(MEDIA_DESK_CHANNEL)
-        await channel.send(formatted)
-
-    if content.startswith("!highlight"):
-        messages = await gather_messages()
-        if not messages:
-            return
-        prompt = "\n".join(messages)
-        result = call_model(prompt)
-        if not result:
-            return
-        formatted = format_headline(result)
-        channel = client.get_channel(MEDIA_DESK_CHANNEL)
-        await channel.send(formatted)
+    print(f"✅ Bot online as {client.user}")
+    client.loop.create_task(scheduler())
 
 
 client.run(DISCORD_TOKEN)
