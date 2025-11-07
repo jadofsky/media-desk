@@ -123,11 +123,28 @@ async def scheduler():
         await asyncio.sleep(60)  # check every minute
 
 
-# -------- BOT READY -------- #
+# -------- BOT READY & COMMAND HANDLING -------- #
 @client.event
 async def on_ready():
     print(f"✅ Bot online as {client.user}")
     client.loop.create_task(scheduler())
+
+
+@client.event
+async def on_message(message: discord.Message):
+    # Ignore the bot's own messages
+    if message.author == client.user:
+        return
+
+    content = message.content.lower().strip()
+
+    if content == "!persona":
+        await post_personality_message()
+        return
+
+    if content == "!highlight":
+        await post_headline_message()
+        return
 
 
 client.run(DISCORD_TOKEN)
