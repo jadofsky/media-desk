@@ -1,25 +1,21 @@
 import discord
-import asyncio
+from discord.ext import tasks, commands
+import pytz
+import datetime
 import random
 import requests
-from datetime import datetime, time
-import pytz
-
-from config import (
-    DISCORD_TOKEN,
-    OPENROUTER_API_KEY,
-    API_BASE_URL,
-    MEDIA_DESK_CHANNEL,
-    CHANNEL_GROUPS
-)
-
 from personalities import PERSONALITIES
+from highlights import generate_headline_post
 
-
-### DISCORD CLIENT ###
+# ---- DISCORD INTENTS ----
 intents = discord.Intents.default()
 intents.message_content = True
-client = discord.Client(intents=intents)
+intents.guilds = True
+intents.members = True
+
+# ---- BOT OBJECT ----
+client = commands.Bot(command_prefix="!", intents=intents)
+
 
 
 ### MODEL CALL ###
@@ -147,6 +143,39 @@ async def scheduler_loop():
 async def on_ready():
     print(f"✅ Media Desk Active as {client.user}")
     client.loop.create_task(scheduler_loop())
+@client.event
+async def on_message(message):
+    # ignore bot messages
+    if message.author == client.user:
+        return
+
+    # let commands work from any channel
+    content = message.content.lower()
+
+    if content.startswith("!persona"):
+        messages = await gather_messages()
+        if not messages:
+            return
+        prompt = "\n".join(messages)
+        result = call_model(prompt)
+        if not result:
+            return
+        persona = random.choice(PERSONALITIES)
+        formatted = f"**{persona['name']} — {persona['style']}**\n{result}"
+        channel = client.get_channel(MEDIA_DESK_CHANNEL)
+        await channel.send(formatted)
+
+    if content.startswith("!highlight"):
+        messages = await gather_messages()
+        if not messages:
+            return
+        prompt = "\n".join(messages)
+        result = call_model(prompt)
+        if not result:
+            return
+        formatted = format_headline(result)
+        channel = client.get_channel(MEDIA_DESK_CHANNEL)
+        await channel.send(formatted)
 
 
 client.run(DISCORD_TOKEN)
