@@ -2,7 +2,7 @@ import discord
 import asyncio
 import random
 import requests
-from datetime import datetime, time
+from datetime import datetime
 import pytz
 
 from config import (
@@ -34,9 +34,9 @@ def call_model(prompt: str) -> str:
             "X-Title": "SSG Media Desk Bot",
         },
         json={
-            "model": "minimax/minimax-m2",
+            "model": "minimax/minimax-m2:free",
             "messages": [
-                {"role": "system", "content": "Write in a clear, engaging sports tone."},
+                {"role": "system", "content": "Write with broadcast sports energy."},
                 {"role": "user", "content": prompt},
             ],
         },
@@ -49,7 +49,7 @@ def call_model(prompt: str) -> str:
     return response["choices"][0]["message"]["content"].strip()
 
 
-# -------- MESSAGE GATHERING (Non-Forum Only) -------- #
+# -------- MESSAGE GATHERING (Skip Forum Channels) -------- #
 async def gather_messages():
     messages = []
 
@@ -59,12 +59,11 @@ async def gather_messages():
                 continue
 
             channel = client.get_channel(ch_id)
-
             if not channel:
                 continue
 
-            # Skip forum channels entirely
-            if hasattr(channel, "threads"):
+            # Skip Forum channels completely
+            if channel.__class__.__name__ == "ForumChannel":
                 continue
 
             try:
@@ -77,7 +76,7 @@ async def gather_messages():
     return messages
 
 
-# -------- POST FUNCTIONS -------- #
+# -------- POST ACTIONS -------- #
 async def post_personality_message():
     messages = await gather_messages()
     if not messages:
@@ -85,7 +84,6 @@ async def post_personality_message():
 
     persona = pick_personality()
     message_body = generate_personality_post(random.choice(messages))
-
     formatted = f"{render_name_style(persona)}\n{message_body}"
 
     channel = client.get_channel(MEDIA_DESK_CHANNEL)
@@ -98,53 +96,50 @@ async def post_headline_message():
         return
 
     headline = generate_headline_post(messages)
-
     channel = client.get_channel(MEDIA_DESK_CHANNEL)
     await channel.send(headline)
 
 
-# -------- SCHEDULING -------- #
-async def scheduler():
-    tz = pytz.timezone("US/Eastern")
-    while True:
-        now = datetime.now(tz).time()
-
-        # Headline windows (10am & 4pm ET)
-        if now.hour == 10 and now.minute == 0:
-            await post_headline_message()
-
-        if now.hour == 16 and now.minute == 0:
-            await post_headline_message()
-
-        # One personality post every hour on the hour
-        if now.minute == 0:
-            await post_personality_message()
-
-        await asyncio.sleep(60)  # check every minute
-
-
-# -------- BOT READY & COMMAND HANDLING -------- #
+# -------- COMMAND TRIGGERS -------- #
 @client.event
-async def on_ready():
-    print(f"✅ Bot online as {client.user}")
-    client.loop.create_task(scheduler())
-
-
-@client.event
-async def on_message(message: discord.Message):
-    # Ignore the bot's own messages
+async def on_message(message):
     if message.author == client.user:
+        return
+
+    if message.channel.id != MEDIA_DESK_CHANNEL:
         return
 
     content = message.content.lower().strip()
 
     if content == "!persona":
         await post_personality_message()
-        return
 
-    if content == "!highlight":
+    elif content == "!highlight":
         await post_headline_message()
-        return
+
+
+# -------- SCHEDULER -------- #
+async def scheduler():
+    tz = pytz.timezone("US/Eastern")
+
+    while True:
+        now = datetime.now(tz)
+
+        # Headlines at 10:00 and 4:00 ET
+        if now.hour in (10, 16) and now.minute == 0:
+            await post_headline_message()
+
+        # One personality post every hour
+        if now.minute == 0:
+            await post_personality_message()
+
+        await asyncio.sleep(60)
+
+
+@client.event
+async def on_ready():
+    print(f"✅ Bot ONLINE — Logged in as {client.user}")
+    client.loop.create_task(scheduler())
 
 
 client.run(DISCORD_TOKEN)
