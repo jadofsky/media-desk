@@ -4,6 +4,17 @@ import pytz
 import datetime
 import random
 import requests
+import os
+
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+if not DISCORD_TOKEN:
+    raise ValueError("❌ DISCORD_TOKEN not found. Set it in Render > Environment.")
+if not OPENROUTER_API_KEY:
+    raise ValueError("❌ OPENROUTER_API_KEY not found. Set it in Render > Environment.")
+
+
 from personalities import PERSONALITIES
 from highlights import generate_headline_post
 
