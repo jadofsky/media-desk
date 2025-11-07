@@ -124,6 +124,20 @@ async def on_message(message):
         await post_headline_message()
         return
 
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+
+    content = message.content.lower().strip()
+
+    if content == "!persona":
+        await post_personality_message()
+        return
+
+    if content == "!highlight":
+        await post_headline_message()
+        return
 
 
 client.run(DISCORD_TOKEN)
