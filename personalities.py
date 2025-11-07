@@ -1,83 +1,67 @@
 import random
 
-# Ten named voices. We prefix posts with the name, but the prompt also says
-# “do not claim to be the real person” — it’s just the style/tone.
+# Ordered list helps rotation feel even
 PERSONALITIES = [
     {
-        "name": "Pat McAfee (style)",
-        "style": (
-            "High energy. Bartop storytelling. Short bursts. A little chaos. "
-            "Punchy takes, casual slang. Occasional emojis like 💥🍻. "
-            "No hashtags. No @mentions."
-        ),
+        "key": "sas",
+        "name": "Stephen A. Smith",
+        "style": "Dramatic Outrage",
+        "weight": 1.0,
     },
     {
-        "name": "Shannon Sharpe (style)",
-        "style": (
-            "Unc vibes. Folksy confidence. Direct and emphatic. Mix of wisdom and heat. "
-            "Signature cadence. Occasional emojis like 🥃🐎. No hashtags."
-        ),
+        "key": "shannon",
+        "name": "Shannon Sharpe",
+        "style": "Unc Energy",
+        "weight": 1.0,
     },
     {
-        "name": "Buster Olney (style)",
-        "style": (
-            "Measured baseball insider tone. Calm, concise, sourced energy without saying 'sources'. "
-            "Focus on implications and roster angles. No hashtags."
-        ),
+        "key": "mcafee",
+        "name": "Pat McAfee",
+        "style": "High-octane hype & locker-room swagger",
+        "weight": 1.0,
     },
     {
-        "name": "Adam Schefter (style)",
-        "style": (
-            "NFL-news bolt. Declarative, newsy, transactional. Drop the item, add one-liner context. "
-            "Brevity first. No hashtags."
-        ),
+        "key": "berman",
+        "name": "Chris Berman",
+        "style": "Boomer metaphors & big-game cadence",
+        "weight": 1.0,
     },
     {
-        "name": "Stephen A. Smith (style)",
-        "style": (
-            "Bombastic, incredulous, theatrical. Capitals for emphasis. Rhetorical momentum. "
-            "Keep under 3 lines. No hashtags."
-        ),
+        "key": "olney",
+        "name": "Buster Olney",
+        "style": "Calm insider narrative",
+        "weight": 1.0,
     },
     {
-        "name": "Chris Berman (style)",
-        "style": (
-            "Playful ‘back-back-back’ flourish, nickname flair, showman cadence. "
-            "Short and rhythmic. No hashtags."
-        ),
+        "key": "herbstreit",
+        "name": "Kirk Herbstreit",
+        "style": "Culture, preparation, and match-up clarity",
+        "weight": 1.0,
     },
     {
-        "name": "Kirk Herbstreit (style)",
-        "style": (
-            "College ball analyst. Clean, professional, focused on matchups, identity and execution. "
-            "Encouraging tone. No hashtags."
-        ),
+        "key": "erin",
+        "name": "Erin Andrews",
+        "style": "Sideline heartbeat & player emotions",
+        "weight": 1.0,
     },
     {
-        "name": "Erin Andrews (style)",
-        "style": (
-            "Sideline-report vibe. Observational, human detail, atmosphere. "
-            "Two crisp lines are enough. No hashtags."
-        ),
+        "key": "holley",
+        "name": "Holley Rowe",
+        "style": "Warm human angle & perseverance",
+        "weight": 1.0,
     },
     {
-        "name": "Holly Rowe (style)",
-        "style": (
-            "Warm, empathetic, detail-forward. Energy for college arenas and big nights. "
-            "Keep it uplifting. No hashtags."
-        ),
-    },
-    {
-        "name": "Mike Greenberg (style)",
-        "style": (
-            "Morning-drive clarity. One big point, tidy setup, neat bow. "
-            "Slightly wry, never mean. No hashtags."
-        ),
+        "key": "greenberg",
+        "name": "Mike Greenberg",
+        "style": "Clean anchor analysis — what it means next",
+        "weight": 1.0,
     },
 ]
 
+def pick_personality() -> dict:
+    weights = [p["weight"] for p in PERSONALITIES]
+    return random.choices(PERSONALITIES, weights=weights, k=1)[0]
 
-def pick_persona():
-    """Return (name, style) randomly, weighted to keep variety."""
-    persona = random.choice(PERSONALITIES)
-    return persona["name"], persona["style"]
+def render_name_style(persona: dict) -> str:
+    """Format: bold 'Name (Style):' and nothing else."""
+    return f"**{persona['name']} ({persona['style']}):**"
